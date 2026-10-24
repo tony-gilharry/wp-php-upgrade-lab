@@ -12,7 +12,9 @@ OUT=.local/crawl
 mkdir -p "$OUT"
 LOG=/tmp/wp-debug.log
 
-docker compose exec -T wordpress sh -c ": > $LOG; chown www-data $LOG" ||
+# As www-data, the log's owner: Linux's fs.protected_regular stops even root
+# from re-creating another user's file in /tmp.
+docker compose exec -T -u www-data wordpress sh -c ": > $LOG" ||
 	die "sandbox is not running: PHP_VERSION=$PHP_VERSION docker compose up -d"
 
 WP_LOADS=yes

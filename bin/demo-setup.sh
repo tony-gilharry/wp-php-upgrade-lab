@@ -9,7 +9,7 @@
 URL="http://localhost:$LAB_PORT"
 
 if ! wpc core is-installed; then
-	PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20)
+	PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 20)
 	wpc core install --url="$URL" --title="PHP Upgrade Lab" \
 		--admin_user=lab-admin --admin_password="$PASS" --admin_email=admin@example.com --skip-email
 	echo "Admin login: lab-admin / $PASS  ($URL/wp-admin/)"

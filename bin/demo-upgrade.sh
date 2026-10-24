@@ -9,10 +9,13 @@ PLUGIN=${1:?plugin slug: legacy-widgets or modern-forms}
 DEST="demo/wp-content/plugins/$PLUGIN"
 [ -d "demo/upgrades/$PLUGIN" ] || die "no upgrade for $PLUGIN in demo/upgrades/"
 
+# Swap the folder's contents, not the folder: on Linux the container owns the
+# mounted plugins/ directory, so the host user cannot delete or create
+# folders directly inside it, only change the files in folders it owns.
 if [ "${2:-}" = "--revert" ]; then
 	git checkout -- "$DEST" && git clean -fdq -- "$DEST"
 else
-	rm -rf "$DEST" && cp -R "demo/upgrades/$PLUGIN" "$DEST"
+	find "$DEST" -mindepth 1 -delete && cp -R "demo/upgrades/$PLUGIN/." "$DEST/"
 fi
 
 grep -E '^ \* (Version|Requires PHP):' "$DEST/$PLUGIN.php"
