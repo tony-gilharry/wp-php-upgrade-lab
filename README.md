@@ -154,6 +154,24 @@ environment.
 - Use a dedicated SSH key per purpose (personal, lab, CI deploy), never a
   personal key in CI.
 
+## Credits
+
+Created by **Tony Gilharry**, with **Claude Code** (Anthropic) as an AI
+collaborator: commits that Claude helped write carry a `Co-Authored-By`
+trailer.
+
+The worked example runs on third-party open-source software, used under its
+own licenses: [WPGraphQL](https://github.com/wp-graphql/wp-graphql) and
+[WP Gatsby](https://github.com/gatsbyjs/wp-gatsby) (GPL-3.0), a theme
+exported with Pinegrow Web Editor (GPL-2.0-or-later), and the libraries
+bundled with them. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+Static analysis uses [PHPCompatibility](https://github.com/PHPCompatibility/PHPCompatibility),
+secret scanning uses [gitleaks](https://github.com/gitleaks/gitleaks), and
+host facts link to each host's own documentation.
+
 ## License
 
-MIT. See [LICENSE](LICENSE).
+The original work in this repository is released under the
+[MIT License](LICENSE): use it, change it, and share it, keeping the
+copyright notice. Third-party code in `examples/` keeps its own licenses;
+see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
