@@ -80,7 +80,18 @@ gh repo edit OWNER/REPO --visibility public --accept-visibility-change-consequen
 ```
 **Expected result:** `curl -s -o /dev/null -w '%{http_code}\n' https://github.com/OWNER/REPO` returns `200` without logging in.
 
-#### B4: Turn on secret scanning and push protection
+#### B4: Protect the default branch
+```bash
+for f in .github/rulesets/*.json; do gh api -X POST repos/OWNER/REPO/rulesets --input "$f"; done
+gh api repos/OWNER/REPO/rulesets --jq '.[] | "\(.name): \(.enforcement)"'
+```
+**Expected result:** `Protect main: active` (no force pushes or deletion, no
+bypass) and `Require CI: active` (pull requests need the CI checks;
+repository admins may push directly).
+**If it fails:** rulesets on private repositories need a paid plan; apply
+them right after B3 makes the repository public.
+
+#### B5: Turn on secret scanning and push protection
 ```bash
 gh api -X PATCH repos/OWNER/REPO \
   -f 'security_and_analysis[secret_scanning][status]=enabled' \
@@ -146,6 +157,11 @@ editor** (one `old==>REDACTED` rule per line), never with `echo` or `printf`,
 which would write the secret into your shell history, then run
 `git filter-repo --replace-text ../replacements.txt` and push as above. Delete
 the file afterwards.
+
+Branch protection blocks the force push: temporarily set the "Protect main"
+ruleset's enforcement to `disabled` (repository Settings → Rules →
+Rulesets), push, then set it back to `active` and confirm with
+`gh api repos/OWNER/REPO/rulesets`.
 
 **Expected result:** in a fresh clone, `git log --all -- .env` prints nothing,
 or a search for a fragment of the leaked value finds nothing.
@@ -218,7 +234,7 @@ hashes and salts no longer work.
 - [ ] `bin/opsec-check.sh` ends with `== CLEAN`
 - [ ] A3 lists no forbidden file types
 - [ ] C1 and C2 return only `403`/`404` on every live site deployed from this repo
-- [ ] Secret scanning and push protection show `enabled` (B4)
+- [ ] Both rulesets show `active` (B4); secret scanning and push protection show `enabled` (B5)
 - [ ] After any incident: rotated credentials tested, old ones refused
 
 ### Troubleshooting
