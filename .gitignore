@@ -21,3 +21,6 @@
 .playwright-mcp/
 .DS_Store
 node_modules/
+
+# Claude Code per-user settings
+.claude/settings.local.json

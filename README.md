@@ -27,11 +27,14 @@ from PHP 7.4 to 8.4 through development, staging and production: see the
 | `bin/demo-scenario.sh` | The whole upgrade story on a bundled demo site, with every step checked |
 | `bin/pull-site.sh`, `bin/import-db.sh` | Bring a WP Engine site's code and database into the sandbox (both stay out of Git) |
 | `bin/crawl-remote.sh` | The crawl, against a WP Engine environment over HTTPS |
+| `bin/wpe-api.sh` | WP Engine Hosting Platform API from the terminal: list installs and their PHP versions, create backups, copy environments, purge caches (the PHP switch itself is portal-only) |
 | `bin/deploy-wpengine.sh` | Git push deploy that ships only `wp-content`, so repo tooling is never served from the live site |
 | `bin/opsec-check.sh` | Pre-publish check: gitleaks, a private denylist, and commit identities |
 | [`docs/playbook.md`](docs/playbook.md) | The process, step by step |
 | [`docs/gotchas.md`](docs/gotchas.md) | What to watch for: PHP, plugins, WP Engine, process |
-| [`docs/wp-engine-checklist.md`](docs/wp-engine-checklist.md) | What a person has to do or check in the WP Engine portal |
+| [`docs/hosts/`](docs/hosts/README.md) | Per-host guides (WP Engine in depth; Pressable, GoDaddy, Kinsta, Flywheel, SiteGround, WordPress.com, Pantheon, Cloudways), each linking to the host's own docs |
+| [`docs/worked-example.md`](docs/worked-example.md) | A real headless site on WP Engine taken from PHP 7.4 to 8.4 through dev, staging and production |
+| [`.claude/skills/wp-php-upgrade`](.claude/skills/wp-php-upgrade/SKILL.md) | A Claude Code skill that runs this process |
 
 ## Try it on the demo site (5 minutes)
 
@@ -104,11 +107,39 @@ PHP_VERSION=8.4 bin/crawl-local.sh     # what breaks
 
 Then follow [the playbook](docs/playbook.md): update in the sandbox until
 both PHP versions crawl clean, prove it on staging, and roll out to
-production with the [portal checklist](docs/wp-engine-checklist.md) next to
-you.
+production with your [host's guide](docs/hosts/README.md) next to you.
 
 Your site's code belongs in its own private repository. Keep `./site` out of
 this one (it is gitignored) and use `bin/deploy-wpengine.sh` from that repo.
+
+## Not on a managed host?
+
+The lab works for any WordPress site, but managed hosts carry much of the
+work for you: they patch PHP builds within hours of a disclosure like
+PHP2Shell, give you staging environments and one-click backups, and let you
+change PHP per environment. On your own server, a VPS or shared hosting
+without those, all of that is on you.
+
+If you run your own hosting, make these two tools the backbone of every
+change:
+
+- **Docker** for a faithful copy of the site on the current and the target
+  PHP. `docker-compose.yml` here is the starting point; match PHP and
+  WordPress versions to the server, and never test on production.
+- **GitHub** (or any Git host) for the site's code, with one commit per
+  change and a deploy that ships only what belongs on the server. Pull
+  requests give you a review step and a record of what changed and why.
+
+You also own what a managed host would do for you: installing patched PHP
+builds (from your OS vendor or a maintained repository), restorable
+backups you have actually tested restoring, a staging copy, and monitoring
+of the PHP error log.
+
+**If that list worries you, move the site to a managed WordPress host.** It
+is usually cheaper than an incident. The [host guides](docs/hosts/README.md)
+compare how the main ones handle PHP versions, staging, SSH, Git and
+backups. Do the move first, then the PHP upgrade, on the new host's staging
+environment.
 
 ## Security notes
 
