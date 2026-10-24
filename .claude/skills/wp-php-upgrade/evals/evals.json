@@ -1,0 +1,65 @@
+{
+  "skill_name": "wp-php-upgrade",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "inventory-rollout-plan",
+      "prompt": "Our agency manages a small business WordPress site on WP Engine (production + staging environments). After the PHP2Shell advisory (CVE-2026-109618/109619) we need to get it off PHP 7.4 fast. WordPress is 7.1.3. Here's `wp plugin list --fields=name,status,version,update,update_version` from the SSH gateway:\n\nadvanced-custom-fields,active,6.1.7,available,6.8.10\nakismet,active,5.2,available,5.7.2\natomic-blocks,active,2.9.0,none,\ncontact-form-7,active,5.7.7,unavailable,6.2.3\nofficial-facebook-pixel,active,3.0.13,available,5.2.2\ntablepress,active,2.1.5,available,3.4.1\nwordpress-seo,inactive,20.12,available,28.7\nwordpress-seo-premium,active,14.0.2,none,\n\nCan you give me the upgrade plan and the exact order to roll it out? The owner doesn't want downtime.",
+      "expected_output": "A plan that targets a PHP version WP Engine actually offers (8.4; WP Engine has no 8.3), tests in a sandbox on both 7.4 and 8.4, classifies contact-form-7 6.2.3 as requiring PHP 8.3 and therefore deploying only after the switch, flags Yoast Premium 14 as a lapsed license likely incompatible with PHP 8 and proposes switching to free Yoast, flags Atomic Blocks as closed and needing replacement, and orders the rollout dev/staging before production with a backup, Preview PHP, and human portal checks.",
+      "files": [],
+      "assertions": [
+        "Targets a PHP version WP Engine offers (8.4, or 8.2) and does not recommend 8.3 as the WP Engine target",
+        "Says Contact Form 7 6.2.3 needs PHP 8.3+ and must be deployed only after the PHP switch",
+        "Flags Yoast Premium 14.0.2 as a lapsed/never-updating premium plugin that is a PHP 8 risk, and proposes switching to free Yoast or renewing",
+        "Flags Atomic Blocks as closed/abandoned and needing replacement",
+        "Has updates tested on both the current PHP (7.4) and the target PHP before production",
+        "Rolls out to a non-production environment (staging/dev) before production, with a backup before production changes",
+        "Mentions WP Engine's Preview PHP / PHP Test Driver for checking production before switching",
+        "Marks portal actions (PHP switch, backup, environment copy) as steps the user performs or approves"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "wpcli-broken-after-switch",
+      "prompt": "Switched our WP Engine production site to PHP 8.4 about an hour ago in the portal, then deployed the Contact Form 7 6.2.3 update. The website loads fine in the browser, but now every wp-cli command over SSH dies with:\n\nPHP Fatal error:  Uncaught RuntimeException: Composer detected issues in your platform: Your Composer dependencies require a PHP version \">= 8.3.0\". You are running 7.4.33.17. in /nas/content/live/oursite/wp-content/plugins/contact-form-7/vendor/composer/platform_check.php:22\n\nDid the PHP switch fail? Should I roll back to 7.4 before customers notice?",
+      "expected_output": "Diagnoses that the website is on 8.4 but the SSH Gateway's CLI PHP still reports 7.4 (the gateway lags the portal setting), so this is a WP-CLI-only failure and not a site outage; advises against rolling back; shows how to confirm the web PHP version (Site Health or an HTTP check, not php -v on the gateway); gives the workaround wp --skip-plugins=contact-form-7; suggests waiting for the gateway to catch up or contacting WP Engine support.",
+      "files": [],
+      "assertions": [
+        "Advises against rolling back to PHP 7.4",
+        "Explains the WP-CLI/SSH gateway PHP (7.4) differs from the web server PHP (8.4), i.e. the switch worked for the website",
+        "Says to verify the web PHP version via Site Health or an HTTP-level check rather than php -v on the gateway",
+        "Gives the workaround wp --skip-plugins=contact-form-7",
+        "Explains that rolling back to 7.4 with CF7 6.2.3 deployed would break the whole site"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "wpengine-deploy-and-debug-log",
+      "prompt": "I keep a git repo for a client's WordPress site. The repo root has docker-compose.yml, a README.md, a bin/ folder with my maintenance scripts, and wp-content/ (themes and plugins). I want to push it to the client's WP Engine staging environment with git push, then turn on debug logging there so I can catch PHP 8.4 warnings before we switch production. What's the right way to do both?",
+      "expected_output": "Warns that WP Engine serves the repo root as the site root, so docker-compose.yml, README.md and bin/ would be publicly downloadable; recommends deploying only wp-content (a deploy-only commit/tree or a separate deploy repo); notes the first push to an empty WP Engine repo only adds files; puts the debug log outside the web root (_wpeprivate/) rather than wp-content/debug.log, with WP_DEBUG_DISPLAY false; mentions wp config set needs an explicit anchor on WP Engine or editing wp-config carefully; and says to remove the debug settings and log afterwards.",
+      "files": [],
+      "assertions": [
+        "Warns that WP Engine serves the pushed repo root as the web root, so docker-compose.yml, README.md and bin/ would be public",
+        "Recommends deploying only wp-content (deploy-only tree/commit, subtree, or separate deploy repo)",
+        "Notes that the first push to an empty WP Engine repo only adds files / deletions apply from later deploys",
+        "Puts the debug log outside the public web root (e.g. _wpeprivate/), not wp-content/debug.log",
+        "Sets WP_DEBUG_DISPLAY to false",
+        "Says to remove the debug settings and delete the log afterwards"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "kinsta-staging-push-trap",
+      "prompt": "We host on Kinsta. I set our staging environment to PHP 8.4, updated every plugin there (one of them, our form plugin, now requires PHP 8.3), and our tests all pass. Live is still on PHP 7.4. My plan: push staging to live tonight, then switch live to PHP 8.4 tomorrow morning after the weekend traffic dies down. Any problems with that plan?",
+      "expected_output": "Points out that a Kinsta environment push always includes the PHP configuration and overwrites the destination, so pushing tonight switches live to PHP 8.4 tonight (the two-step plan does not exist as imagined); alternatively, if PHP were not carried, a plugin requiring PHP 8.3 on a 7.4 live site would take the site down. Recommends treating the push as the PHP switch itself (backup first, push in a low-traffic window, crawl/verify right after) or splitting the updates by PHP requirement; cites Kinsta's documentation.",
+      "files": [],
+      "assertions": [
+        "States that a Kinsta push includes/overwrites the PHP configuration, so live switches to 8.4 when staging is pushed",
+        "Does not claim that the push leaves live's PHP version unchanged",
+        "Explains that a plugin requiring PHP 8.3 running on PHP 7.4 can take the site down (fatal/500)",
+        "Recommends a backup of live before pushing",
+        "References Kinsta's documentation for the push/PHP behaviour"
+      ]
+    }
+  ]
+}
