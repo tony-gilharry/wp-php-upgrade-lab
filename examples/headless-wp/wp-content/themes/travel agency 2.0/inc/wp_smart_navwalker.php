@@ -111,9 +111,11 @@ class PG_Smart_Walker_Nav_Menu extends Walker_Nav_Menu {
          */
         $classes = apply_filters( 'nav_menu_css_class', array_filter( $classes ), $item, $args, $depth );
 
-        for($i = 0; $i < count($classes); $i++) {
-            if($classes[$i] == 'current-menu-item') {
-                $classes[$i] = self::$options['current_class'];
+        // array_filter() keeps the original keys, so walk the keys that exist
+        // (indexing from 0 warns on PHP 8 when the first class was empty).
+        foreach ( $classes as $key => $class ) {
+            if ( 'current-menu-item' === $class ) {
+                $classes[ $key ] = self::$options['current_class'];
             }
         }
         $class_names = join( ' ',  $classes);
