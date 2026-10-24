@@ -76,6 +76,10 @@ Public material carries the user's name, so every claim in it must be real.
   one mistakes them for real work.
 - When a claim cannot be checked (a version number, a CVE, a result), say
   so and ask the user to confirm it before publishing.
+- The process doc, runbook and lab scripts are this skill's references, not
+  the user's setup. Do not tell the user "your process says" or assume they
+  have `bin/opsec-check.sh`, a Keychain entry or a denylist; offer the tools
+  and give the plain commands (`gitleaks`, `git grep`) that work anywhere.
 
 ## Before a release
 
