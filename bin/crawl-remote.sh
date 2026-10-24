@@ -3,6 +3,10 @@
 # summarize status codes plus PHP errors from a debug log on the server.
 #   bin/crawl-remote.sh <environment>
 #   LOG=_wpeprivate/debug-lab.log bin/crawl-remote.sh <environment>
+#   PREVIEW_PHP=8.4 bin/crawl-remote.sh <environment>   # WP Engine Preview PHP
+# PREVIEW_PHP sends WP Engine's wpengine_php cookie with every request, so the
+# crawl sees the site on that PHP version without switching the environment.
+# The Site Health line in the report confirms whether the preview took effect.
 # LOG defaults to /dev/null (status codes only). Keep debug logs in
 # _wpeprivate/, which WP Engine never serves: a log under wp-content/ is
 # downloadable by anyone who guesses its name. Turning a debug log on and off
@@ -12,7 +16,8 @@
 
 ENV=${1:?environment name}
 LOG=${LOG:-/dev/null}
-OUT=".local/crawl-$ENV"
+OUT=".local/crawl-$ENV${PREVIEW_PHP:+-preview-$PREVIEW_PHP}"
+PREVIEW_COOKIE=${PREVIEW_PHP:+wpengine_php=$PREVIEW_PHP}
 mkdir -p "$OUT"
 
 BASE=$(remote "$ENV" "wp option get home" 2>/dev/null)
@@ -39,12 +44,12 @@ EOF
 
 : > "$OUT/status.txt"
 while read -r url; do
-	code=$(curl -s -o "$OUT/last.html" -w '%{http_code}' --max-time 60 "$url")
+	code=$(curl -s -o "$OUT/last.html" -w '%{http_code}' --max-time 60 ${PREVIEW_COOKIE:+-b "$PREVIEW_COOKIE"} "$url")
 	grep -q "critical error" "$OUT/last.html" && code="$code CRITICAL"
 	echo "$code $url" >> "$OUT/status.txt"
 done < "$OUT/urls.txt"
 for p in index.php plugins.php edit.php edit.php?post_type=page post-new.php options-general.php themes.php tools.php site-health.php; do
-	code=$(curl -s -o "$OUT/last.html" -w '%{http_code}' --max-time 60 -b "$COOKIE" "$BASE/wp-admin/$p")
+	code=$(curl -s -o "$OUT/last.html" -w '%{http_code}' --max-time 60 -b "$COOKIE${PREVIEW_COOKIE:+; $PREVIEW_COOKIE}" "$BASE/wp-admin/$p")
 	grep -q "critical error" "$OUT/last.html" && code="$code CRITICAL"
 	grep -q 'id="loginform"' "$OUT/last.html" && code="$code LOGIN-REDIRECT"
 	echo "$code ADMIN $p" >> "$OUT/status.txt"
@@ -52,7 +57,7 @@ done
 
 # Headless sites: the GraphQL API is what the front end depends on. If the
 # site answers on /graphql, send a small query and require data back.
-GQL=$(curl -s -o "$OUT/graphql.json" -w '%{http_code}' --max-time 60 -H 'Content-Type: application/json' \
+GQL=$(curl -s -o "$OUT/graphql.json" -w '%{http_code}' --max-time 60 ${PREVIEW_COOKIE:+-b "$PREVIEW_COOKIE"} -H 'Content-Type: application/json' \
 	--data '{"query":"{ generalSettings { title } posts(first: 3) { nodes { title } } }"}' "$BASE/graphql")
 if [ "$GQL" != "404" ]; then
 	if grep -q '"generalSettings"' "$OUT/graphql.json" && ! grep -q '"errors"' "$OUT/graphql.json"; then
@@ -63,12 +68,12 @@ if [ "$GQL" != "404" ]; then
 fi
 
 # The PHP version serving web requests. The gateway's CLI PHP can lag behind it.
-WEB_PHP=$(curl -s -b "$COOKIE" "$BASE/wp-admin/site-health.php?tab=debug" | grep -oE 'PHP version</th><td>[0-9.]+' | head -1 | sed 's/.*<td>//')
+WEB_PHP=$(curl -s -b "$COOKIE${PREVIEW_COOKIE:+; $PREVIEW_COOKIE}" "$BASE/wp-admin/site-health.php?tab=debug" | grep -oE 'PHP version</th><td>[0-9.]+' | head -1 | sed 's/.*<td>//')
 # No quotes in remote commands: the gateway re-splits them (docs/gotchas.md).
 CLI_PHP=$(remote "$ENV" "php -v" 2>/dev/null | awk 'NR==1 {print $2}')
 remote "$ENV" "cat $LOG" > "$OUT/debug.log" 2>/dev/null
 
-echo "== $ENV: web PHP ${WEB_PHP:-unknown}, gateway CLI PHP ${CLI_PHP:-unknown}"
+echo "== $ENV${PREVIEW_PHP:+ (Preview PHP $PREVIEW_PHP requested)}: web PHP ${WEB_PHP:-unknown}, gateway CLI PHP ${CLI_PHP:-unknown}"
 echo "== HTTP status (non-200)"
 awk '$1!="200" || $2=="CRITICAL" || $2=="LOGIN-REDIRECT" || $2=="GRAPHQL-ERROR"' "$OUT/status.txt"
 OK=$(grep -cE '^200 (ADMIN|http|GRAPHQL ok)' "$OUT/status.txt" | tr -d ' ')
