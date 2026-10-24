@@ -29,11 +29,21 @@ credentials() {
 		die "no API credentials: add them to the Keychain (service wpe-api) or set WPE_API_USER and WPE_API_PASSWORD"
 }
 
+# A curl config line with the credentials, escaped for curl's quoted strings.
+curl_auth_config() {
+	local creds="$WPE_API_USER:$WPE_API_PASSWORD"
+	creds=${creds//\\/\\\\}
+	creds=${creds//\"/\\\"}
+	printf 'user = "%s"\n' "$creds"
+}
+
 # api METHOD PATH [JSON-BODY]: prints the response body, fails on HTTP >= 400.
 api() {
 	local method=$1 path=$2 body=${3:-} out code
 	out=$(mktemp)
-	code=$(curl -s -o "$out" -w '%{http_code}' -X "$method" -u "$WPE_API_USER:$WPE_API_PASSWORD" \
+	# Credentials go to curl on stdin (--config -), never on the command line,
+	# where any local user could read them with ps.
+	code=$(curl_auth_config | curl -s --config - -o "$out" -w '%{http_code}' -X "$method" \
 		-H 'Content-Type: application/json' ${body:+--data "$body"} "$API$path")
 	if [ "$code" -ge 400 ]; then
 		echo "error: $method $path returned HTTP $code: $(head -c 300 "$out")" >&2

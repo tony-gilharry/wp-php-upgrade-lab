@@ -5,11 +5,15 @@
 LAB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$LAB_ROOT" || exit 1
 
+# Load .env without overriding variables already set in the environment, so
+# `PHP_VERSION=7.4 bin/crawl-local.sh` wins over .env, as with docker compose.
 if [ -f .env ]; then
-	set -a
-	# shellcheck disable=SC1091
-	. ./.env
-	set +a
+	while IFS='=' read -r key value; do
+		case $key in '' | \#*) continue ;; esac
+		[[ $key =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+		[ -n "${!key+set}" ] && continue
+		export "$key=$value"
+	done < .env
 fi
 
 PHP_VERSION=${PHP_VERSION:-8.4}

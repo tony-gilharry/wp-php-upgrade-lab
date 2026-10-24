@@ -39,7 +39,9 @@ from PHP 7.4 to 8.4 through development, staging and production: see the
 ## Try it on the demo site (5 minutes)
 
 Needs Docker, and PHP plus Composer for the static scan
-(`brew install php composer` on macOS).
+(`brew install php composer` on macOS). The first run downloads the
+WordPress, WP-CLI and MariaDB images for two PHP versions (about 1 to 2 GB);
+after that the whole scenario takes under two minutes.
 
 ```bash
 git clone https://github.com/tony-gilharry/wp-php-upgrade-lab.git
