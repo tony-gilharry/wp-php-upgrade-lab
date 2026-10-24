@@ -2,8 +2,11 @@
 # Deploy wp-content to a WP Engine environment with Git push, without shipping
 # anything else from the repo.
 #   bin/deploy-wpengine.sh <git-remote> [commit] [site-root]
-#   bin/deploy-wpengine.sh wpengine-staging                 # main, wp-content at repo root
-#   bin/deploy-wpengine.sh wpengine-staging main demo       # this lab's demo site
+# Run it from inside the repository you are deploying: usually your site's
+# own private repo (call it by path: ~/wp-php-upgrade-lab/bin/deploy-wpengine.sh).
+#   .../deploy-wpengine.sh wpengine-staging                  # main, wp-content at repo root
+#   bin/deploy-wpengine.sh wpe-dev main examples/headless-wp # from this repo
+# Never add a host remote to this public lab repo for a client site.
 #
 # WP Engine serves the repo root as the site root, so README.md, bin/ and
 # docker-compose.yml would be publicly downloadable if pushed directly. This
@@ -12,7 +15,11 @@
 # Files dropped between deploys are deleted on the server; empty directories
 # are left behind (docs/gotchas.md).
 set -euo pipefail
+START_DIR=$PWD
 . "$(dirname "$0")/lib.sh"
+# lib.sh moves to the lab root; deploy the repository the command was run from.
+REPO=$(cd "$START_DIR" && git rev-parse --show-toplevel 2>/dev/null) || die "run this from inside the Git repository to deploy"
+cd "$REPO"
 
 REMOTE=${1:?git remote for a WP Engine environment, e.g. wpengine-staging}
 SOURCE=$(git rev-parse --verify "${2:-main}^{commit}")

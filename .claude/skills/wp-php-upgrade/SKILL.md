@@ -1,6 +1,6 @@
 ---
 name: wp-php-upgrade
-description: Safely upgrade a WordPress site to a newer PHP version (7.4 → 8.x, 8.2 → 8.4, or an emergency move after a PHP CVE such as PHP2Shell) on a managed host such as WP Engine, Pressable, GoDaddy, Kinsta, Flywheel, SiteGround, WordPress.com, Pantheon or Cloudways. Covers auditing plugins and themes for PHP compatibility, reproducing the site in a local Docker sandbox on the old and new PHP side by side, deciding which updates ship before and after the PHP switch, and rolling out through dev, staging and production with the checks a human must do in the host's portal. Use this whenever someone asks about upgrading or switching PHP on WordPress, whether plugins are "ready for PHP 8", what will break on a new PHP version, testing a WordPress site on a different PHP version, a host warning about end-of-life PHP, WP-CLI or a site failing after a PHP change, or deploying plugin updates to WP Engine around a PHP change, even if they never say "upgrade".
+description: Plan, test and roll out a PHP version upgrade for a WordPress site (7.4 → 8.x, 8.2 → 8.4, or an emergency move after a PHP security advisory such as PHP2Shell) with the wp-php-upgrade-lab repo. Audits plugins and themes, runs the site in Docker on the old and new PHP side by side, decides which updates ship before or after the switch, and rolls out dev → staging → production. In depth for WP Engine, with guides for Kinsta, Pressable, GoDaddy, Flywheel, SiteGround, WordPress.com, Pantheon and Cloudways. Use whenever someone asks about upgrading or switching a WordPress site's PHP, whether plugins or a theme are "ready for PHP 8", a host or Site Health warning about outdated or end-of-life PHP, testing WordPress on another PHP version, or WP-CLI, a critical error or a Composer platform check failing after a PHP change, even if they never say "upgrade". Not for PHP apps outside WordPress or plugin updates with no PHP change.
 ---
 
 # WordPress PHP upgrade
@@ -10,19 +10,40 @@ what breaks. The method: reproduce the site locally on the old and the new
 PHP, fix until both are clean, then roll out in an order where **every
 intermediate state works**.
 
-This skill drives the tooling in the `wp-php-upgrade-lab` repository
-(`bin/` scripts, `docker-compose.yml`, `docs/`). Paths below are relative to
-that repo. If you are not inside it, find it locally or clone
-`https://github.com/tony-gilharry/wp-php-upgrade-lab`, and keep the user's
-site code out of it (it goes in the gitignored `site/` folder).
+**Not every request needs the whole workflow.** For a single question (a
+WP-CLI error after a switch, how a host copies PHP between environments,
+whether a deploy order is safe), answer from the ground rules below,
+`docs/gotchas.md` and the host's guide in `docs/hosts/`, and cite the host's
+own documentation linked there.
+
+## Where the tooling lives
+
+This skill drives the `wp-php-upgrade-lab` repository (`bin/` scripts,
+`docker-compose.yml`, `docs/`). Run commands from its root; paths below are
+relative to it. To find it: use the current directory if it has
+`bin/crawl-local.sh`; otherwise resolve this skill's base directory
+(`readlink -f` if it is a symlink) and go two levels up from `.claude/skills/`;
+otherwise ask the user. If there is no copy, ask before cloning
+`https://github.com/tony-gilharry/wp-php-upgrade-lab`, then
+`cp .env.example .env`.
+
+The lab repo is **public**. The user's site never enters its Git history: the
+site's code goes in the gitignored `site/` folder (or `SITE_DIR` points at the
+site's own checkout), and it is committed and deployed from **the site's own
+private repository**. Never add a host remote to the lab repo or force-add
+`site/`.
+
+Prerequisites: Docker; local `php` and `composer` for the scan; `jq`.
 
 ## Ground rules, and why
 
 - **The user owns anything outward-facing.** Changing PHP in a host portal,
-  making backups, copying environments, and every write to production need
-  the user's explicit go-ahead in this conversation. Production is a live
-  business; a mistake there is not undoable the way a local one is. Prepare
-  everything, then ask.
+  backups and environment copies are the user's to do. Any command that
+  changes a remote environment (a deploy, a `wp-config.php` edit, a WP-CLI
+  write, a `bin/wpe-api.sh` backup or copy) needs a go-ahead in this
+  conversation; on production, ask before each one and show the exact
+  command. Production is a live business; a mistake there is not undoable the
+  way a local one is. Prepare everything, then ask.
 - **Both-versions rule.** Production keeps running the old PHP while new code
   arrives, and runs the new PHP before the last updates arrive. So every
   change must be tested on both PHP versions, or explicitly deferred until
@@ -32,8 +53,8 @@ site code out of it (it goes in the gitignored `site/` folder).
   anything a regression: things are often already broken.
 - **Nothing private leaks.** Production database copies stay in `.local/`,
   site code in `site/`, real environment names in `.env`. Debug logs on a
-  server go outside the web root. Never push a repo that contains tooling to
-  a host that serves the repo root (WP Engine does).
+  server go outside the web root. Before publishing anything derived from
+  this work, follow `docs/opsec/process.md`.
 
 ## Workflow
 
@@ -42,19 +63,33 @@ site code out of it (it goes in the gitignored `site/` folder).
 Find out: host, environments (WP Engine offers Development, Staging and
 Production), current PHP, WordPress version, active theme, plugins with
 versions and available updates, and what the site is for (brochure site,
-store, headless API for a front end).
+store, headless API for a front end). On WP Engine with API credentials,
+`bin/wpe-api.sh installs` lists every environment and its portal PHP setting
+(read-only).
 
 Read the host guide in `docs/hosts/<host>.md` now. It says how that host
 changes PHP, copies environments, exposes SSH and WP-CLI, deploys code and
 shows logs, and which PHP versions it offers. The target version must be one
-the host actually offers (WP Engine: 7.4, 8.2, 8.4, no 8.3).
+the host actually offers (WP Engine: 7.4, 8.2, 8.4, no 8.3). For a host
+without a guide, or a self-managed server, work through "What to check on any
+host" in `docs/hosts/README.md`.
 
-### 2. Audit and scan
+### 2. Get the site, audit and scan
 
 ```bash
-CURRENT_PHP=7.4 bin/plugin-audit.sh   # needs SITE_DIR with the site's wp-content
-bin/compat-scan.sh 8.4                # exactly one target version
+cp .env.example .env          # SITE_DIR=./site, WPE_PROD_ENV, PROD_DOMAIN, TABLE_PREFIX
+bin/pull-site.sh              # WP Engine: code -> site/, database -> .local/
+CURRENT_PHP=<current> bin/plugin-audit.sh
+bin/compat-scan.sh <target>   # exactly one target version
 ```
+
+Check `SITE_DIR` first: it defaults to `./demo`, so if it is missing the audit
+and scan run on the bundled demo site without any error.
+
+Other hosts: copy themes, plugins and must-use plugins into
+`site/wp-content` and a database export into `.local/` as the host guide
+describes, write the server's `wp core version` to `.local/<name>.wp-version`,
+and pass the dump path to `bin/import-db.sh` in step 3.
 
 Classify every plugin and the theme:
 
@@ -70,9 +105,8 @@ Classify every plugin and the theme:
 ### 3. Sandbox
 
 ```bash
-bin/pull-site.sh                       # code -> site/, database -> .local/ (WP Engine)
 PHP_VERSION=<current> docker compose up -d
-bin/import-db.sh                       # also installs the server's WordPress core version
+PHP_VERSION=<current> bin/import-db.sh          # matches core to the server's version
 PHP_VERSION=<current> bin/crawl-local.sh
 PHP_VERSION=<target> docker compose up -d --force-recreate wordpress
 PHP_VERSION=<target> bin/crawl-local.sh
@@ -93,16 +127,25 @@ Reading the results:
   code paths. Say so instead of treating them as blockers.
 - **Deprecations from `wp-includes/`** mean the sandbox runs an old
   WordPress core; re-run `bin/import-db.sh` so core matches the server.
+- **"WP-CLI cannot load this site"** means a plugin refuses to load on that
+  PHP: it is a ship-after-the-switch change.
+
+For a realistic end-to-end run, see `docs/worked-example.md`.
 
 ### 4. Fix in the sandbox
 
-Update plugins with WP-CLI inside the sandbox
-(`docker compose run --rm cli wp plugin update <slug>`), swap dev builds for
-released plugins, fix theme code, and crawl on **both** PHP versions after
-every change. After replacing files, restart the web container: OPcache keeps
-serving old code for a while.
+Update plugins with WP-CLI on the **current** PHP, so WP-CLI does not install
+a release the current PHP cannot run:
+`PHP_VERSION=<current> docker compose run --rm cli wp plugin update <slug>`
+(pin `--version=<x>` when the latest release needs the new PHP). Swap dev
+builds for released plugins, fix theme code, and crawl on **both** PHP
+versions after every change. After replacing files,
+`docker compose restart wordpress`: OPcache keeps serving old code for a
+while.
 
-Commit in the site's own repository, split by when each change can deploy:
+Commit in the site's own repository (the checkout `SITE_DIR` points at; if
+the site has none, `git init` inside `site/`, which the lab ignores), split
+by when each change can deploy:
 
 1. Changes that run on both PHP versions (deploy before the switch).
 2. Removals of dead or replaced plugins (after they are deactivated on the
@@ -118,23 +161,31 @@ with WP-CLI, rehearse them on staging, and take before-and-after screenshots.
 For each environment, in this order:
 
 1. **[User]** Back up (production always), and refresh the environment from
-   production with the host's copy feature.
-2. Deploy the both-versions commits (`bin/deploy-wpengine.sh <remote> <commit>`
-   on WP Engine; see the host guide elsewhere). Do the WP-CLI swaps.
-3. Turn on a debug log outside the web root, crawl
-   (`LOG=_wpeprivate/debug-lab.log bin/crawl-remote.sh <env>` on WP Engine).
-4. **[User]** Switch PHP in the portal. On WP Engine, try **Preview PHP**
-   on production first: a cookie lets only the user's browser see the new
-   version.
-5. Crawl again. Confirm the **web** PHP version (Site Health), not the
-   shell's: they can differ for hours.
-6. Deploy the new-PHP-only commits. Crawl.
-7. **[User]** Check key pages by eye, including on a phone-sized screen,
+   production with the host's copy feature. Check its PHP version afterwards.
+2. **[User approves on production]** From the site's repository, deploy group
+   1 (`<lab>/bin/deploy-wpengine.sh <remote> <commit>` on WP Engine; other
+   hosts: see the guide). Do the WP-CLI plugin swaps, then deploy group 2.
+3. **[User approves on production]** Turn on a debug log outside the web
+   root. On WP Engine use the `bash -s` snippet in `docs/hosts/wp-engine.md`:
+   `wp config set` needs `--anchor` there, and the gateway drops quotes from
+   inline commands. Crawl:
+   `LOG=_wpeprivate/debug-lab.log bin/crawl-remote.sh <env>`.
+4. On production, preview the new PHP before switching if the host can. On
+   WP Engine: `PREVIEW_PHP=<target> LOG=_wpeprivate/debug-lab.log
+   bin/crawl-remote.sh <prod-env>`; the web-PHP line in its report confirms
+   the preview took effect.
+5. **[User]** Switch PHP in the portal.
+6. Crawl again. Confirm the **web** PHP version (Site Health), not the
+   shell's: they can differ for hours. If `crawl-remote.sh` says WP-CLI
+   returned nothing, the gateway is lagging; check the site in a browser
+   before treating it as an outage.
+7. **[User approves on production]** Deploy group 3. Crawl.
+8. **[User]** Check key pages by eye, including on a phone-sized screen,
    and submit real forms. A 200 does not mean the page looks right.
 
 Afterwards: remove debug settings, delete logs, delete leftover plugin and
-theme folders (deploys may not), and check the host's error log the next
-day.
+theme folders and empty directories (deploys may not), and check the host's
+error log the next day.
 
 How environments copy PHP differs by host, and it changes the plan: WP
 Engine and WordPress.com do not carry the PHP version with a copy, a Kinsta
@@ -178,8 +229,8 @@ One paragraph: can it go, what blocks it, and the order.
 (Ships = before the switch / after the switch / remove / replace)
 
 ## Rollout
-Numbered steps per environment, each marked [User] or [Claude], ending with
-the checks a person must do in the host's portal.
+Numbered steps per environment, each marked [User], [User approves] or
+[Claude], ending with the checks a person must do in the host's portal.
 
 ## Risks and unknowns
 What was not tested (forms, payments, cron, front ends) and how to check it.

@@ -1,7 +1,7 @@
 #!/bin/bash
 # For every plugin in $SITE_DIR, compare the installed version with the latest
 # on WordPress.org and flag what will get in the way of a PHP upgrade.
-#   bin/plugin-audit.sh            # flags against the target PHP in PHP_VERSION
+#   CURRENT_PHP=7.4 bin/plugin-audit.sh   # NEEDS-PHP flags releases newer than CURRENT_PHP
 # Flags:
 #   CLOSED      removed from WordPress.org; no more security fixes
 #   STALE       no release in over two years
