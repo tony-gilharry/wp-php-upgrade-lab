@@ -138,12 +138,17 @@ Follow Procedure E for each Tier 1 item **before** cleaning history.
 #### D3: Purge it from history
 ```bash
 git clone --mirror https://github.com/OWNER/REPO.git repo-purge.git && cd repo-purge.git
-printf '%s\n' 'LEAKED-STRING==>REDACTED' > ../replacements.txt     # one rule per line
-git filter-repo --replace-text ../replacements.txt                 # or: --path FILE --invert-paths
+git filter-repo --path .env --invert-paths      # a whole file: removes it from every commit
 git push --force --mirror origin
-cd .. && rm -rf repo-purge.git replacements.txt
 ```
-**Expected result:** `git log -p --all | grep -c 'LEAKED-STRING'` in a fresh clone prints `0`.
+For a string inside a file that must stay, create `../replacements.txt` **in an
+editor** (one `old==>REDACTED` rule per line), never with `echo` or `printf`,
+which would write the secret into your shell history, then run
+`git filter-repo --replace-text ../replacements.txt` and push as above. Delete
+the file afterwards.
+
+**Expected result:** in a fresh clone, `git log --all -- .env` prints nothing,
+or a search for a fragment of the leaked value finds nothing.
 **If it fails:** `filter-repo` removes the `origin` remote after rewriting; re-add it with `git remote add origin <url>` before pushing. Collaborators must re-clone; old clones still contain the data.
 
 #### D4: Ask the host to clear cached copies
