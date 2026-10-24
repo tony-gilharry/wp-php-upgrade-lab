@@ -1,0 +1,23 @@
+# Local settings and real environment names
+.env
+.opsec-denylist
+
+# Your own site's code and data never belong in this public repo
+/site/
+/.local/
+*.sql
+*.sql.gz
+*.log
+
+# Files the WordPress Docker image copies into the mounted demo folders
+/demo/wp-content/themes/*
+!/demo/wp-content/themes/.gitkeep
+/demo/wp-content/plugins/akismet/
+/demo/wp-content/plugins/hello.php
+/demo/wp-content/plugins/index.php
+/demo/wp-content/index.php
+
+# Tooling caches
+.playwright-mcp/
+.DS_Store
+node_modules/
