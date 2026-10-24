@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck bin/
+        run: shellcheck -x -S warning bin/*.sh
+
+  compat-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          tools: composer
+      - name: The original demo plugins fail the PHP 8.4 scan
+        run: |
+          if bin/compat-scan.sh 8.4 demo/wp-content/plugins/legacy-widgets; then
+            echo "expected PHP 8.4 errors in Legacy Widgets 1.0"; exit 1
+          fi
+      - name: The upgraded demo plugins pass the PHP 8.4 scan
+        run: bin/compat-scan.sh 8.4 demo/upgrades
+      - name: Modern Forms 2.0 is flagged as unsafe on PHP 7.4
+        run: |
+          if bin/compat-scan.sh 7.4 demo/upgrades/modern-forms; then
+            echo "expected Modern Forms 2.0 to fail on PHP 7.4"; exit 1
+          fi
+
+  demo-scenario:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure the sandbox
+        run: cp .env.example .env
+      - name: Run all six steps of the upgrade story
+        run: bin/demo-scenario.sh --fresh
+      - name: Keep the crawl output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crawl
+          path: .local/crawl/
