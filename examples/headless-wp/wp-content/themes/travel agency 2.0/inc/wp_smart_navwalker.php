@@ -9,6 +9,11 @@
  * License URI: http://www.gnu.org/licenses/gpl-2.0.txt
  * Based on WordPress Walker_Nav_Menu code
  *
+ * Modified 2026-10-23 by Tony Gilharry for wp-php-upgrade-lab: start_el()
+ * now walks the keys array_filter() actually keeps, fixing an
+ * "Undefined array key 0" warning on PHP 8. Distributed under the same
+ * GPL-2.0-or-later license as the original.
+ *
  */
 
 
